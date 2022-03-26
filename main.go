@@ -28,7 +28,7 @@ func loadFlvDemuxer(this js.Value, args []js.Value) interface{} {
 		return map[string]interface{}{"err": "Missing required arguments"}
 	}
 	id := args[0].String()
-	js.Global().Get("console").Call("log", "id:", js.ValueOf(id))
+	// js.Global().Get("console").Call("log", "id:", js.ValueOf(id))
 	streamLen := args[1].Get("byteLength").Int()
 	streamBytes := make([]byte, streamLen)
 	js.CopyBytesToGo(streamBytes, args[1])
@@ -66,11 +66,91 @@ func loadFlvDemuxer(this js.Value, args []js.Value) interface{} {
 	}
 
 	return map[string]interface{}{
-		"err": js.ValueOf(nil),
+		"err":      js.ValueOf(nil),
 		"version":  version,
 		"hasVideo": hasVideo,
 		"hasAudio": hasAudio,
 	}
+}
+
+/**
+	参数1 id 需要JS生成唯一ID
+	参数2 tag buffer 要读取的tag数据 不包含previous 的tag头和data
+
+	读取flv Tag head和body的信息，读取传入的tag数据并返回相应的数据结构
+**/
+func readTag(this js.Value, args []js.Value) interface{} {
+	var ok bool
+	var demuxWorker *DemuxWorker
+	var err error
+	if len(args) == 0 {
+		return map[string]interface{}{"err": "Missing required arguments"}
+	}
+
+	id := args[0].String()
+	if demuxWorker, ok = dws[id]; !ok {
+		return map[string]interface{}{"err": "Can not found Demuxer"}
+	}
+
+	// js.Global().Get("console").Call("log", "id:", js.ValueOf(id))
+	tagLen := args[1].Get("byteLength").Int()
+	tagBytes := make([]byte, tagLen)
+	js.CopyBytesToGo(tagBytes, args[1])
+
+	tagType, tagSize, timestamp, err := demuxWorker.demuxer.ReadTagHeaderByBytes(tagBytes)
+	if err != nil {
+		return map[string]interface{}{"err": err.Error()}
+	}
+
+	tag := tagBytes[11:tagLen]
+	// js.Global().Get("console").Call("log", "tagType:", js.ValueOf(tagType.String()))
+	if tagType == 9 {
+		frame, err := demuxWorker.videoPackager.Decode(tag)
+		if err != nil {
+			return map[string]interface{}{"err": err.Error()}
+		}
+		buffer := Uint8Array.New(len(frame.Raw))
+		js.CopyBytesToJS(buffer, frame.Raw)
+		return map[string]interface{}{
+			"err": js.ValueOf(nil),
+			"header": map[string]interface{}{
+				"tagType":   tagType.String(),
+				"tagSize":   tagSize,
+				"timestamp": timestamp,
+			},
+			"body": map[string]interface{}{
+				"videocodec": frame.CodecID.String(),
+				"frameType":  frame.FrameType.String(),
+				"trait":      frame.Trait.String(),
+				"cts":        frame.CTS,
+				"Raw":        buffer,
+			},
+		}
+	} else if tagType == 8 {
+		frame, err := demuxWorker.audioPackager.Decode(tag)
+		if err != nil {
+			return map[string]interface{}{"err": err.Error()}
+		}
+		buffer := Uint8Array.New(len(frame.Raw))
+		js.CopyBytesToJS(buffer, frame.Raw)
+		return map[string]interface{}{
+			"err": js.ValueOf(nil),
+			"header": map[string]interface{}{
+				"tagType":   tagType.String(),
+				"tagSize":   tagSize,
+				"timestamp": timestamp,
+			},
+			"body": map[string]interface{}{
+				"audiocodec":      frame.SoundFormat.String(),
+				"frameType":       frame.SoundType.String(),
+				"trait":           frame.Trait.String(),
+				"audioLevel":      frame.AudioLevel,
+				"audioSampleBits": frame.SoundSize.String(),
+				"Raw":             buffer,
+			},
+		}
+	}
+	return js.ValueOf(nil)
 }
 
 /**
@@ -177,6 +257,7 @@ func registerCallbacks() {
 	js.Global().Set("loadFlvDemuxer", js.FuncOf(loadFlvDemuxer))
 	js.Global().Set("cancelDemuxer", js.FuncOf(cancelDemuxer))
 	js.Global().Set("read", js.FuncOf(read))
+	js.Global().Set("readTag", js.FuncOf(readTag))
 }
 
 func main() {

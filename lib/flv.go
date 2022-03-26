@@ -66,6 +66,10 @@ type Demuxer interface {
 	ReadHeader() (version uint8, hasVideo, hasAudio bool, err error)
 	// Read the FLV tag header, return the tag information, especially the tag size,
 	// then user can read the tag payload.
+	// Compare with ReadTagHeader, the only difference is the index of the parameter.
+	ReadTagHeaderByBytes(p []byte) (tagType TagType, tagSize, timestamp uint32, err error)
+	// Read the FLV tag header, return the tag information, especially the tag size,
+	// then user can read the tag payload.
 	ReadTagHeader() (tagType TagType, tagSize, timestamp uint32, err error)
 	// Read the FLV tag body, drop the next 4 bytes previous tag size.
 	ReadTag(tagSize uint32) (tag []byte, err error)
@@ -103,6 +107,14 @@ func (v *demuxer) ReadHeader() (version uint8, hasVideo, hasAudio bool, err erro
 	version = uint8(p[3])
 	hasVideo = (p[4] & 0x01) == 0x01
 	hasAudio = ((p[4] >> 2) & 0x01) == 0x01
+
+	return
+}
+
+func (v *demuxer) ReadTagHeaderByBytes(p []byte) (tagType TagType, tagSize uint32, timestamp uint32, err error) {
+	tagType = TagType(p[0])
+	tagSize = uint32(p[1])<<16 | uint32(p[2])<<8 | uint32(p[3])
+	timestamp = uint32(p[7])<<24 | uint32(p[4])<<16 | uint32(p[5])<<8 | uint32(p[6])
 
 	return
 }
