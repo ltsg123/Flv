@@ -15,12 +15,25 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Document</title>
   <script src="./wasm_exec.js"></script>
+  <script src="./webcodecs.js"></script>
+  <style>
+    #container {
+      width: 700px;
+      height: 400px;
+    }
+  </style>
 </head>
 
 <body>
-
+  <canvas id="container" autoplay></canvas>
 </body>
 <script>
+  const media = document.getElementById('container');
+  media.width = 700;
+  media.height = 400;
+  const ctx = media.getContext('2d');
+  initDecoder((frame) => ctx.drawImage(frame, 0, 0));
+
   // polyfill
   if (!WebAssembly.instantiateStreaming) {
     WebAssembly.instantiateStreaming = async (resp, importObject) => {
