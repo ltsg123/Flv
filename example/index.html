@@ -43,7 +43,7 @@
     })
   }
 
-  loadWasm('./main.wasm').then((wasm) => {
+  loadWasm('./flv.wasm').then((wasm) => {
     console.log("main.wasm is loaded 👋")
     parserFlv()
     // requestFlv().then((res) => {
@@ -96,7 +96,27 @@
   function handleTag(tag) {
     // console.log('tag',tag)
     if (load_result) {
-      console.log(readTag(0, tag))
+      // console.log(readTag(0, tag))
+      const res = readTag(0, tag);
+      // console.log(res)
+      if (res && res.body && res.body.trait === "SequenceHeader") {
+        console.log(res);
+        console.log('avc:', res.body.Raw);
+        console.log('sps数目：', res.body.Raw[5] & 0x1f);
+        console.log('sps长度：', res.body.Raw[6] << 8 | res.body.Raw[7]);
+        const size = res.body.Raw[6] << 8 | res.body.Raw[7];
+        console.log('sps：', res.body.Raw.subarray(8, size + 8));
+        const ppsIndex = size + 8;
+        console.log('pps数目', res.body.Raw[ppsIndex]);
+        console.log('pps长度', res.body.Raw[ppsIndex + 1] << 8 | res.body.Raw[ppsIndex + 2]);
+        const ppssize = res.body.Raw[ppsIndex + 1] << 8 | res.body.Raw[ppsIndex + 2];
+        console.log('pps：', res.body.Raw.subarray(ppsIndex + 3, ppsIndex + 3 + ppssize));
+
+
+
+
+
+      }
     }
   }
 
