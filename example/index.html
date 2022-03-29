@@ -32,7 +32,13 @@
   media.width = 700;
   media.height = 400;
   const ctx = media.getContext('2d');
-  initDecoder((frame) => ctx.drawImage(frame, 0, 0));
+  initDecoder((frame) => {
+    ctx.drawImage(frame, 0, 0);
+    frame.close();
+  });
+
+  let sps, pps;
+  let splitCode = new Uint8Array([0, 0, 0, 1]);
 
   // polyfill
   if (!WebAssembly.instantiateStreaming) {
@@ -105,30 +111,44 @@
       });
     });
   }
-
+  let flag = false;
+  // https://www.jianshu.com/p/e1e417eee2e7
   function handleTag(tag) {
     // console.log('tag',tag)
     if (load_result) {
       // console.log(readTag(0, tag))
       const res = readTag(0, tag);
       // console.log(res)
-      if (res && res.body && res.body.trait === "SequenceHeader") {
+      if (res && res.header && res.header.tagType === 'Video' && res.body && res.body.trait === "SequenceHeader") {
         console.log(res);
         console.log('avc:', res.body.Raw);
         console.log('sps数目：', res.body.Raw[5] & 0x1f);
         console.log('sps长度：', res.body.Raw[6] << 8 | res.body.Raw[7]);
         const size = res.body.Raw[6] << 8 | res.body.Raw[7];
         console.log('sps：', res.body.Raw.subarray(8, size + 8));
+        sps = concatUint8(splitCode, res.body.Raw.subarray(8, size + 8));
         const ppsIndex = size + 8;
         console.log('pps数目', res.body.Raw[ppsIndex]);
         console.log('pps长度', res.body.Raw[ppsIndex + 1] << 8 | res.body.Raw[ppsIndex + 2]);
         const ppssize = res.body.Raw[ppsIndex + 1] << 8 | res.body.Raw[ppsIndex + 2];
         console.log('pps：', res.body.Raw.subarray(ppsIndex + 3, ppsIndex + 3 + ppssize));
-
-
-
-
-
+        pps = concatUint8(splitCode, res.body.Raw.subarray(ppsIndex + 3, ppsIndex + 3 + ppssize));
+      } else {
+        if (res && res.body && res.body.trait !== 'NALU') {
+          return
+        }
+        if (res && res.header && res.header.tagType === 'Video') {
+          if (res.body && res.body.frameType === "Keyframe") {
+            console.log(res)
+            console.log('key');
+            const frame = concatUint8(sps, pps, splitCode, res.body.Raw.subarray(4));
+            inputChunk(frame, res.header.timestamp, true)
+          } else {
+            console.log('nokey');
+            const frame = concatUint8(splitCode, res.body.Raw.subarray(4));
+            inputChunk(frame, res.header.timestamp, false)
+          }
+        }
       }
     }
   }
